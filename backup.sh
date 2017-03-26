@@ -1,28 +1,30 @@
 #!/usr/bin/bash
 
-if [ ! -d "/mnt/system" ]; then
-    sudo mkdir /mnt/system
-    echo "/mnt/system directory not exist! creating..."
-fi
-
-mountStatus=`mount | grep '/mnt/system'`
-if [ "$mountStatus" != "" ]; then
-    echo "/mnt/system has mounted by other device!"
-    read -p "Do you want to remove it? (y/n)" umountFlag
-    if [ "$umountFlag" = "y" ]; then
-        sudo umount /mnt/system && echo "unmount successfully!"
-    else
-        echo "cannot mount! exiting..."
-        exit
+exportVal() {
+    if [ ! -d "/mnt/system" ]; then
+        sudo mkdir /mnt/system
+        echo "/mnt/system directory not exist! creating..."
     fi
-fi
-    
-rootDevice=`mount | grep ' / ' | awk '{print $1}' | tr -d '\n'`
-sudo mount $rootDevice /mnt/system
 
-if [ ! -d "/mnt/system/backup" ]; then
-    sudo mkdir /mnt/system/backup
-fi
+    mountStatus=`mount | grep '/mnt/system'`
+    if [ "$mountStatus" != "" ]; then
+        echo "/mnt/system has mounted by other device!"
+        read -p "Do you want to remove it? (y/n)" umountFlag
+        if [ "$umountFlag" = "y" ]; then
+            sudo umount /mnt/system && echo "unmount successfully!"
+        else
+            echo "cannot mount! exiting..."
+            exit
+        fi
+    fi
+
+    rootDevice=`mount | grep ' / ' | awk '{print $1}' | tr -d '\n'`
+    sudo mount $rootDevice /mnt/system
+
+    if [ ! -d "/mnt/system/backup" ]; then
+        sudo mkdir /mnt/system/backup
+    fi
+}
 
 listSnapshot () {
     echo ""
@@ -80,20 +82,34 @@ restoreSnapshot () {
     sudo mv /mnt/system/@ /mnt/system/@_ori
     echo "Backup successfully!"
     echo "rename /mnt/system/$selectedSnap to /mnt/system/@..."
-    sudo cp -r /mnt/system/$selectedSnap /mnt/system/@
+    sudo cp -a /mnt/system/$selectedSnap /mnt/system/@
     echo "Rename successfully!"
     echo "Every will shift back to $selectedSnap after you reboot!"
 }
-    
-if [ "$1" = "-c" ]; then
-    createSnapshot
-elif [ "$1" = "-d" ]; then
-    deleteSnapshot
-elif [ "$1" = "-l" ]; then
-    listSnapshot
-elif [ "$1" = "-r" ]; then
-    restoreSnapshot
-fi
 
-sudo umount /mnt/system
-    
+printUsage() {
+    echo "-c or --create for create a snapshot"
+    echo "-d or --delete for delete a snapshot"
+    echo "-l or --list for list all snapshots"
+    echo "-r or --restore for restore from a snapshot"
+}
+
+if [ "$1" = "-c" -o "$1" = "--create" ]; then
+    exportVal
+    createSnapshot
+    sudo umount /mnt/system
+elif [ "$1" = "-d" -o "$1" = "--delete" ]; then
+    exportVal
+    deleteSnapshot
+    sudo umount /mnt/system
+elif [ "$1" = "-l" -o "$1" = "--list" ]; then
+    exportVal
+    listSnapshot
+    sudo umount /mnt/system
+elif [ "$1" = "-r" -o "$1" = "--restore" ]; then
+    exportVal
+    restoreSnapshot
+    sudo umount /mnt/system
+elif [ "$1" = "--usage" -o "$1" = "--help" ]; then
+    printUsage
+fi
