@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-exportVal() {
+loadVal() {
     if [ ! -d "/mnt/system" ]; then
         sudo mkdir /mnt/system
         echo "/mnt/system directory not exist! creating..."
@@ -26,6 +26,11 @@ exportVal() {
     fi
 }
 
+unload() {
+    sudo umount /mnt/system
+    echo "exiting..."
+}
+
 listSnapshot () {
     echo ""
     echo "Snapshots List:"
@@ -36,6 +41,7 @@ listSnapshot () {
     else
         sudo btrfs subvolume list / | grep "backup"
     fi
+    echo "-------------------------------------------------------------"
     echo ""
 }
 
@@ -72,18 +78,13 @@ restoreSnapshot () {
         exit
     fi
     selectedSnap=`sudo btrfs subvolume list / | grep "backup" | grep "$selectedID" | awk '{print $9}'`
-    createSnapshot
-    if [ -d "/mnt/system/@_ori" ]; then
-        echo "/mnt/system/@_ori has exist! cleaning..."
-        sudo btrfs subvolume delete /mnt/system/@_ori || exit
-        echo "Clean successfully!"
-    fi
-    echo "Backup /mnt/system/@ to /mnt/system/@_ori..."
-    sudo mv /mnt/system/@ /mnt/system/@_ori
-    echo "Backup successfully!"
-    echo "rename /mnt/system/$selectedSnap to /mnt/system/@..."
-    sudo cp -a /mnt/system/$selectedSnap /mnt/system/@
-    echo "Rename successfully!"
+    backupTime=`date -d now +%Y-%m-%d_%H-%M-%S`
+    backupDir=/mnt/system/backup/$backupTime
+    sudo mkdir $backupDir
+    echo "move /mnt/system/@ to $backupDir..."
+    sudo mv /mnt/system/@ $backupDir/@
+    echo "restore system from /mnt/system/$selectedSnap..."
+    sudo btrfs subvolume snapshot /mnt/system/$selectedSnap /mnt/system/
     echo "Every will shift back to $selectedSnap after you reboot!"
 }
 
@@ -95,21 +96,21 @@ printUsage() {
 }
 
 if [ "$1" = "-c" -o "$1" = "--create" ]; then
-    exportVal
+    loadVal
     createSnapshot
-    sudo umount /mnt/system
+    unload
 elif [ "$1" = "-d" -o "$1" = "--delete" ]; then
-    exportVal
+    loadVal
     deleteSnapshot
-    sudo umount /mnt/system
+    unload
 elif [ "$1" = "-l" -o "$1" = "--list" ]; then
-    exportVal
+    loadVal
     listSnapshot
-    sudo umount /mnt/system
+    unload
 elif [ "$1" = "-r" -o "$1" = "--restore" ]; then
-    exportVal
+    loadVal
     restoreSnapshot
-    sudo umount /mnt/system
-elif [ "$1" = "--usage" -o "$1" = "--help" ]; then
+    unload
+elif [ "$1" = "--usage" -o "$1" = "--help" -o "$1" = "-h" ]; then
     printUsage
 fi
