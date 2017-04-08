@@ -19,9 +19,11 @@ class Backend(object):
         pass
     def loadVal(self):
         self.mountPoint = "/mnt/system"
-        self.backDir = self.mountPoint + "/backup"
+        self.backupDir = self.mountPoint + "/backup"
         self.snapLabels = [0, 2, 5, 7]
         self.snapitems = [1, 3, 6, 8]
+        self.homeMode = False
+
         if not os.path.exists(self.mountPoint):
             os.mkdir(self.mountPoint)
         mountStr = subprocess.getoutput("mount")
@@ -29,6 +31,8 @@ class Backend(object):
         for mount in mountList:
             if mount[2] == '/':
                 self.rootDevice = mount[0]
+            if mount[2] == '/home' and mount[0] == self.rootDevice:
+                self.homeMode = True
         try:
             (flag, errorInfo) = subprocess.getstatusoutput("mount " + self.rootDevice + ' ' + self.mountPoint)
             if flag != 0:
@@ -36,37 +40,48 @@ class Backend(object):
         except AttributeError:
             print("Cannot find a root device or a mount point!")
             print("exiting...")
-            exit(0)
+            return 1
         except MountError as e:
-            print(e)
+            return 2
 
-        if not os.path.exists(self.backDir):
-            os.mkdir(self.backDir)
+        if not os.path.exists(self.backupDir):
+            os.mkdir(self.backupDir)
+        return self.homeMode
+
+    def listRootSnap(self):
+        pass
 
     def listSnapshot(self):
         snapStr = subprocess.getoutput("btrfs subvolume list " + self.mountPoint)
-        self.snapMat = [snapList.split() for snapList in snapStr.split("\n") if snapList.split()[8][:6] == "backup"]
-        snapLabels = [self.snapMat[0][i] for i in range(len(self.snapMat[0])) if i in self.snapLabels]
-        snapMat = [[self.snapMat[i][j] for j in range(len(self.snapMat[0])) if j in self.snapitems] for i in range(len(self.snapMat))]
-        return snapLabels, snapMat
+        snapMat = [snapList.split() for snapList in snapStr.split("\n") if snapList.split()[8][:6] == "backup"]
+        self.snapLabels = [snapMat[0][i] for i in range(len(snapMat[0])) if i in self.snapLabels]
+        self.rootSnapMat = [[snapMat[i][j] for j in range(len(snapMat[0])) if j in self.snapitems] for i in range(len(snapMat)) if snapMat[i][-1][-1] == '@']
+        if self.homeMode:
+            self.homeSnapMat = [[snapMat[i][j] for j in range(len(snapMat[0])) if j in self.snapitems] for i in range(len(snapMat)) if snapMat[i][-1][-5:] == '@home']
+            return self.snapLabels, self.rootSnapMat, self.homeSnapMat
+        return self.snapLabels, self.snapMat
 
-    def createSnapshot(self):
+    def createRootSnapshot(self):
         import time
-        snapDir = self.backDir + "/" + time.strftime("%Y-%m-%d_%H-%M-%S")
+        snapDir = self.backupDir + "/" + time.strftime("%Y-%m-%d_%H-%M-%S")
         os.mkdir(snapDir)
         subprocess.getoutput("btrfs subvolume snapshot " + self.mountPoint + '/@' + " " + snapDir)
         return self.listSnapshot()
 
+    def createHomeSnapshot(self):
+        import time
+        snapDir = self.backupDir + "/" + time.strftime("%Y-%m-%d_%H-%M-%S")
+        os.mkdir(snapDir)
+        subprocess.getoutput("btrfs subvolume snapshot " + self.mountPoint + '/@home' + " " + snapDir)
+        return self.listSnapshot()
+
     def deleteSnapshot(self, i):
+        import re
         self.listSnapshot()
-        try:
-            snapshot = self.snapMat[i][-1]
-        except IndexError:
-            return False
-            print("Index out of range!")
+        snapshot = snapMat[i][-1]
         subprocess.getoutput("btrfs subvolume delete " + self.mountPoint + "/" + snapshot)
-        os.rmdir(self.mountPoint + "/" + snapshot[:-2])
-        return True
+        #os.rmdir(self.mountPoint + "/" + re.findall('(.*)?/@.*', snapshot)[0])
+        return self.listSnapshot()
         pass
     def restoreSnapshot(self):
         pass
