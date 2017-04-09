@@ -12,7 +12,6 @@ class MainWindow(QtWidgets.QMainWindow):
         super(MainWindow, self).__init__()
         self.initVar()
         self.createActions()
-        self.createMenuBar()
         self.createToolBar()
         self.setupUi()
         self.retranslateUi()
@@ -30,30 +29,52 @@ class MainWindow(QtWidgets.QMainWindow):
         self.selectedSnap = -1
 
         self.backend = Backend()
-        self.homeMode = self.backend.loadVal()
+        self.mode = self.backend.loadVal()
         self.updateSnapList()
+        self.mountPoints = ['@', '@home']
+        self.taskList = [self.backend.createRootSnapshot, self.backend.createHomeSnapshot]
+        self.iconPath = 'icons/'
+        self.actionNameList = [
+            "createRootSnapshot",
+            "createHomeSnapshot",
+            "deleteSnapshot",
+            "settings",
+            "about",
+            "exit",
+        ]
+        self.tipList = [
+            'Create a snapshot of root subvolume',
+            'Create a snapshot of home subvolume',
+            'Delete selected snapshot',
+            'Configurations',
+            'Know more about Klone',
+            'Exit',
+        ]
+
+        self.backThread = BackThread()
+        self.logger = LoggerThread()
 
     def setupUi(self):
         self.setGeometry(self.x, self.y, self.windowWidth, self.windowHeight)
+        self.setWindowIcon(QtGui.QIcon('icons/icon.png'))
         self.centralWidget = QtWidgets.QWidget()
         self.gridLayout = QtWidgets.QGridLayout()
-
-        self.pageStack = QtWidgets.QStackedWidget()
+        self.pageTab = QtWidgets.QTabWidget()
+        self.pageTab.setMinimumSize(QtCore.QSize(self.windowWidth, self.windowHeight * 2 // 3))
         self.textBrowser = QtWidgets.QTextBrowser()
         self.textBrowser.setMinimumSize(QtCore.QSize(self.windowWidth, self.windowHeight // 3))
-        self.gridLayout.addWidget(self.pageStack, 0, 0, 2, 1)
+        self.gridLayout.addWidget(self.pageTab, 0, 0, 2, 1)
         self.gridLayout.addWidget(self.textBrowser, 2, 0, 3, 1)
 
-        self.rootTable = QtWidgets.QTableWidget(len(self.rootSnapMat), len(self.rootSnapMat[0]))
-        self.rootTable.setMinimumSize(QtCore.QSize(self.windowWidth, self.windowHeight * 2 // 3))
-        self.rootTable.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self.rootTable.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.homeTable = QtWidgets.QTableWidget(len(self.homeSnapMat), len(self.homeSnapMat[0]))
-        self.homeTable.setMinimumSize(QtCore.QSize(self.windowWidth, self.windowHeight * 2 // 3))
-        self.homeTable.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self.homeTable.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.pageStack.addWidget(self.rootTable)
-        self.pageStack.addWidget(self.homeTable)
+        self.tableList = []
+        for i in range(self.mode):
+            table = QtWidgets.QTableWidget(len(self.snapMatList[i]), len(self.snapMatList[i][0]))
+            table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+            table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+            table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+            table.horizontalHeader().setStretchLastSection(True)
+            self.pageTab.addTab(table, self.mountPoints[i])
+            self.tableList.append(table)
 
         self.centralWidget.setLayout(self.gridLayout)
         self.setCentralWidget(self.centralWidget)
@@ -66,63 +87,39 @@ class MainWindow(QtWidgets.QMainWindow):
         return screen.width(), screen.height()
 
     def createActions(self):
-        self.createRootAction = QtWidgets.QAction(QtGui.QIcon("icons/createRoot.png"), "createRootSnapshot", self)
-        self.createHomeAction = QtWidgets.QAction(QtGui.QIcon("icons/createHome.png"), "createHomeSnapshot", self)
-        self.deleteAction = QtWidgets.QAction(QtGui.QIcon("icons/delete.png"), "deleteSnapshot", self)
-        self.exitAction = QtWidgets.QAction(QtGui.QIcon("icons/exit.png"), "exit", self)
-        self.settingAction = QtWidgets.QAction(QtGui.QIcon("icons/settings.png"), "setting", self)
-        self.aboutAction = QtWidgets.QAction("about", self)
-
-        self.createRootAction.setStatusTip('Create a snapshot of root subvolume')
-        self.createHomeAction.setStatusTip('Create a snapshot of home subvolume')
-        self.deleteAction.setStatusTip('Delete selected snapshot')
-        self.exitAction.setStatusTip('Exit')
-        self.aboutAction.setStatusTip('Know more about Klone')
-        self.settingAction.setStatusTip('Configuration')
-
-    def createMenuBar(self):
-        self.menuBar = QtWidgets.QMenuBar()
-        #self.menuBar.setGeometry(QtCore.QRect(0, 0, 800, 30))
-        self.menuTools = QtWidgets.QMenu(self.menuBar)
-        self.menuSetting = QtWidgets.QMenu(self.menuBar)
-        self.setMenuBar(self.menuBar)
-
-        self.menuTools.addAction(self.createRootAction)
-        self.menuTools.addAction(self.createHomeAction)
-        self.menuTools.addAction(self.exitAction)
-        self.menuSetting.addAction(self.settingAction)
-        self.menuSetting.addAction(self.aboutAction)
-        self.menuBar.addAction(self.menuTools.menuAction())
-        self.menuBar.addAction(self.menuSetting.menuAction())
+        self.actionList = []
+        for actionNum in range(len(self.actionNameList)):
+            action = QtWidgets.QAction(QtGui.QIcon(self.iconPath + self.actionNameList[actionNum] + '.png'), self.actionNameList[actionNum], self)
+            action.setStatusTip(self.tipList[actionNum])
+            self.actionList.append(action)
 
     def createToolBar(self):
         self.toolBar = QtWidgets.QToolBar(self)
         self.toolBar.setIconSize(QtCore.QSize(32, 32))
-        self.switchBox = QtWidgets.QComboBox()
-        self.switchBox.addItems(['/', '/home'])
-        self.toolBar.addWidget(self.switchBox)
-        self.toolBar.addAction(self.createRootAction)
-        self.toolBar.addAction(self.createHomeAction)
-        self.toolBar.addAction(self.deleteAction)
-        self.toolBar.addAction(self.exitAction)
-
+        for action in self.actionList:
+            self.toolBar.addAction(action)
 
         self.addToolBar(QtCore.Qt.TopToolBarArea, self.toolBar)
         self.insertToolBarBreak(self.toolBar)
 
     def createConnects(self):
-        self.exitAction.triggered.connect(self.close)
-        self.settingAction.triggered.connect(self.settingWindow.show)
-        self.deleteAction.triggered.connect(self.deleteSnapshot)
-        self.createRootAction.triggered.connect(self.createRootSnapshot)
-        self.createHomeAction.triggered.connect(self.createHomeSnapshot)
-        self.switchBox.activated.connect(self.changePage)
+        self.connectList = [
+            self.createSnapshot,
+            self.createSnapshot,
+            self.deleteSnapshot,
+            self.settingWindow.show,
+            self.temp,
+            self.close,
+        ]
+        for actionNum in range(len(self.actionList)):
+            self.actionList[actionNum].triggered.connect(self.connectList[actionNum])
+        self.backThread.signal.connect(self.createDone)
+        self.logger.signal.connect(self.textBrowser.append)
 
     def retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
         self.setWindowTitle(_translate("MainWindow", "Klone"))
-        self.menuTools.setTitle(_translate("MainWindow", "tools"))
-        self.menuSetting.setTitle(_translate("MainWindow", "setting"))
+
 
     '''
     Slots
@@ -130,55 +127,69 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot()
     def updateSnapList(self):
-        if self.homeMode:
+        if self.mode == 2:
             self.snapLabels, self.rootSnapMat, self.homeSnapMat = self.backend.listSnapshot()
         else:
             self.snapLabels, self.rootSnapMat = self.backend.listSnapshot()
+        self.snapMatList = [self.rootSnapMat, self.homeSnapMat]
 
     @QtCore.pyqtSlot()
     def fillTable(self):
-        self.rootTable.setHorizontalHeaderLabels(self.snapLabels)
-        self.rootTable.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-        #self.table.resizeColumnsToContents()
-        self.rootTable.setColumnWidth(3, 400)
-        for i in range(len(self.rootSnapMat)):
-            for j in range(len(self.rootSnapMat[0])):
-                self.rootTable.setItem(i, j, QtWidgets.QTableWidgetItem(self.rootSnapMat[i][j]))
-        if self.homeMode:
-            self.homeTable.setHorizontalHeaderLabels(self.snapLabels)
-            self.homeTable.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-            #self.table.resizeColumnsToContents()
-            self.homeTable.setColumnWidth(3, 400)
-            for i in range(len(self.homeSnapMat)):
-                for j in range(len(self.homeSnapMat[0])):
-                    self.homeTable.setItem(i, j, QtWidgets.QTableWidgetItem(self.homeSnapMat[i][j]))
+        for tableID in range(len(self.tableList)):
+            self.tableList[tableID].setHorizontalHeaderLabels(self.snapLabels)
+            for i in range(len(self.snapMatList[tableID])):
+                for j in range(len(self.snapMatList[tableID][0])):
+                    self.tableList[tableID].setItem(i, j, QtWidgets.QTableWidgetItem(self.snapMatList[tableID][i][j]))
+
+
+    @QtCore.pyqtSlot()
+    def createSnapshot(self):
+        self.logger.setText('creating snapshot of ' + self.mountPoints[0])
+        self.logger.start()
+        self.disableAllActions()
+        self.backThread.setTask(self.taskList[0], 0)
+        self.backThread.start()
+
+    @QtCore.pyqtSlot(int)
+    def createDone(self, tableID):
+        if tableID == 3:
+            self.enableAllActions()
+            return
+        self.tableList[tableID].setRowCount(self.tableList[tableID].rowCount() + 1)
+        self.updateSnapList()
+        self.fillTable()
+        self.actionList[tableID].setEnabled(True)
+        self.logger.setText('complete creating')
+        self.logger.start()
+        self.enableAllActions()
 
 
     @QtCore.pyqtSlot()
     def deleteSnapshot(self):
-        self.selectedSnap = self.table.currentRow()
-        self.backend.deleteSnapshot(self.selectedSnap)
-        self.rootTable.removeRow(self.selectedSnap)
-        self.snapLabels, self.snapMat = self.backend.listSnapshot()
+        tableID = self.pageTab.currentIndex()
+        self.selectedSnap = self.tableList[tableID].currentRow()
+        self.disableAllActions()
+        self.logger.setText('deleting snapshot ' + self.snapMatList[tableID][self.selectedSnap][-1])
+        self.logger.start()
+        self.backThread.setTask(lambda x = self.selectedSnap: self.backend.deleteRootSnapshot(x), 3)
+        self.backThread.start()
+        self.tableList[tableID].removeRow(self.selectedSnap)
         self.fillTable()
+        self.updateSnapList()
 
     @QtCore.pyqtSlot()
-    def createRootSnapshot(self):
-        self.updateSnapList()
-        self.rootTable.setRowCount(self.rootTable.rowCount() + 1)
-        self.backend.createRootSnapshot()
-        self.fillTable()
+    def disableAllActions(self):
+        for action in self.actionList:
+            action.setDisabled(True)
 
     @QtCore.pyqtSlot()
-    def createHomeSnapshot(self):
-        self.updateSnapList()
-        self.homeTable.setRowCount(self.homeTable.rowCount() + 1)
-        self.backend.createHomeSnapshot()
-        self.fillTable()
+    def enableAllActions(self):
+        for action in self.actionList:
+            action.setEnabled(True)
 
-    @QtCore.pyqtSlot(int)
-    def changePage(self, pageNum):
-        self.pageStack.setCurrentIndex(pageNum)
+    @QtCore.pyqtSlot()
+    def temp(self):
+        pass
 
 
     '''
@@ -187,7 +198,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def closeEvent(self, event):
         self.backend.release()
-
 
 
 class SettingWindow(QtWidgets.QMainWindow):
@@ -224,9 +234,41 @@ class SettingWindow(QtWidgets.QMainWindow):
         self.setWindowTitle("Setting")
 
 
+class BackThread(QtCore.QThread):
+    signal = QtCore.pyqtSignal(int)
+    def __init__(self):
+        super(BackThread, self).__init__()
+
+    def setTask(self, task, processID):
+        self.task = task
+        self.processID = processID
+
+    def run(self):
+        self.task()
+        self.signal.emit(self.processID)
+
+
+
+class LoggerThread(QtCore.QThread):
+    signal = QtCore.pyqtSignal(str)
+    def __init__(self):
+        super(LoggerThread, self).__init__()
+
+    def setText(self, text):
+        import time
+        self.text = '\t'.join([time.strftime("%Y-%m-%d %H:%M:%S"), text])
+
+    def run(self):
+        self.signal.emit(self.text)
+
+
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
+    #stylesheet = QtCore.QFile("stylesheet.qss")
+    #stylesheet.open(QtCore.QIODevice.ReadOnly)
+    #app.setStyleSheet(stylesheet.readAll().data().decode('utf-8'))
+
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
