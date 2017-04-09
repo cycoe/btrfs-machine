@@ -33,7 +33,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.updateSnapList()
         self.mountPoints = ['@', '@home']
         self.taskList = [self.backend.createRootSnapshot, self.backend.createHomeSnapshot]
-        self.iconPath = 'icons/'
+        self.iconPath = 'asset/icons/'
         self.actionNameList = [
             "createRootSnapshot",
             "createHomeSnapshot",
@@ -62,9 +62,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.pageTab = QtWidgets.QTabWidget()
         self.pageTab.setMinimumSize(QtCore.QSize(self.windowWidth, self.windowHeight * 2 // 3))
         self.textBrowser = QtWidgets.QTextBrowser()
-        self.textBrowser.setMinimumSize(QtCore.QSize(self.windowWidth, self.windowHeight // 3))
-        self.gridLayout.addWidget(self.pageTab, 0, 0, 2, 1)
-        self.gridLayout.addWidget(self.textBrowser, 2, 0, 3, 1)
+        self.textBrowser.setMinimumSize(QtCore.QSize(self.windowWidth // 3 * 2, self.windowHeight // 3))
+        self.gridLayout.addWidget(self.pageTab, 0, 0, 2, 3)
+        self.gridLayout.addWidget(self.textBrowser, 2, 0, 3, 2)
 
         self.tableList = []
         for i in range(self.mode):
@@ -113,7 +113,7 @@ class MainWindow(QtWidgets.QMainWindow):
         ]
         for actionNum in range(len(self.actionList)):
             self.actionList[actionNum].triggered.connect(self.connectList[actionNum])
-        self.backThread.signal.connect(self.createDone)
+        self.backThread.signal.connect(self.taskDone)
         self.logger.signal.connect(self.textBrowser.append)
 
     def retranslateUi(self):
@@ -151,13 +151,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.backThread.start()
 
     @QtCore.pyqtSlot(int)
-    def createDone(self, tableID):
+    def taskDone(self, tableID):
         if tableID == 3:
+            self.logger.setText('complete deleting')
+            self.logger.start()
             self.enableAllActions()
             return
         self.tableList[tableID].setRowCount(self.tableList[tableID].rowCount() + 1)
         self.updateSnapList()
         self.fillTable()
+        self.tableList[tableID].verticalScrollBar().setSliderPosition(self.tableList[tableID].rowCount())
         self.actionList[tableID].setEnabled(True)
         self.logger.setText('complete creating')
         self.logger.start()
