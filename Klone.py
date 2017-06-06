@@ -129,9 +129,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def updateSnapList(self):
         if self.mode == 2:
             self.snapLabels, self.rootSnapMat, self.homeSnapMat = self.backend.listSnapshot()
+            self.snapMatList = [self.rootSnapMat, self.homeSnapMat]
         else:
             self.snapLabels, self.rootSnapMat = self.backend.listSnapshot()
-        self.snapMatList = [self.rootSnapMat, self.homeSnapMat]
+            self.snapMatList = [self.rootSnapMat]
 
     @QtCore.pyqtSlot()
     def fillTable(self):

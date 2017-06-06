@@ -35,7 +35,7 @@ class Backend(object):
         for mount in mountList:
             if mount[2] == '/':
                 self.rootDevice = mount[0]
-            if mount[2] == '/home' and mount[0] == self.rootDevice:
+            if mount[2] == '/home' and mount[4] == 'btrfs' and mount[0] == self.rootDevice:
                 self.mode = 2
         try:
             (flag, errorInfo) = subprocess.getstatusoutput("mount " + self.rootDevice + ' ' + self.mountPoint)
